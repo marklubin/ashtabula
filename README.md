@@ -1,3 +1,4 @@
+![logo](https://github.com/user-attachments/assets/f98ef082-8d07-4c0f-99a1-578e1c091437)
 # Ashtabula AI Framework
 
 Ashtabula is an AI framework that integrates speech-to-text, text-to-speech, and language model capabilities using state-of-the-art models from Hugging Face.
