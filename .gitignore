@@ -1,3 +1,6 @@
+.vscode/
+.idea/
+test_artifacts/
 # Python-generated files
 __pycache__/
 *.py[oc]

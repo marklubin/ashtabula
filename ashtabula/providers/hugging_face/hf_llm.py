@@ -31,6 +31,62 @@ class HuggingFaceLLMProvider(LLMProvider):
         if self.device == "cpu":
             self.model = self.model.to(self.device)
 
+    def predict(self,
+               partial_text: str,
+               max_length: Optional[int] = None,
+               temperature: float = 0.7) -> str:
+        """
+        Predict how the user will complete their current sentence.
+        
+        Args:
+            partial_text: The incomplete sentence to predict completion for
+            max_length: Maximum length of predicted completion
+            temperature: Sampling temperature (0.0-1.0)
+            
+        Returns:
+            Predicted sentence completion
+        """
+        if not partial_text.strip():
+            return ""
+            
+        try:
+            # Tokenize input
+            inputs = self.tokenizer(
+                partial_text,
+                return_tensors="pt"
+            )
+            input_ids = inputs["input_ids"].to(self.device)
+            
+            # Generate completion
+            with torch.no_grad():
+                outputs = self.model.generate(
+                    input_ids,
+                    max_new_tokens=max_length or 50,  # Default to 50 tokens for completion
+                    do_sample=True,
+                    temperature=temperature,
+                    top_p=0.9,  # More focused sampling for completion
+                    top_k=20,   # More focused sampling for completion
+                    pad_token_id=self.tokenizer.eos_token_id
+                )
+            
+            # Decode and return completion
+            full_response = self.tokenizer.decode(
+                outputs[0],
+                skip_special_tokens=True
+            )
+            
+            # Remove the input text from response
+            completion = full_response[len(partial_text):].strip()
+            
+            # If completion doesn't end with sentence-ending punctuation, add it
+            if not any(completion.rstrip().endswith(char) for char in {'.', '!', '?'}):
+                completion += '.'
+                
+            return completion
+            
+        except Exception as e:
+            raise RuntimeError(f"Failed to predict completion: {str(e)}")
+
     def generate(self,
                 input_text: str,
                 max_length: Optional[int] = None,

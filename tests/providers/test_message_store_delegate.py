@@ -26,6 +26,10 @@ class MockLLM(LLMProvider):
     def generate(self, input_text, max_length=None, temperature=0.7, top_p=0.95, top_k=50):
         # Echo input for testing
         return f"Response to: {input_text}"
+        
+    def predict(self, partial_text: str, max_length=None, temperature=0.7) -> str:
+        # Echo input with completion marker for testing
+        return f"{partial_text} [completion]."
 
 def test_delegate_without_history():
     """Test generation with no message history."""
@@ -120,6 +124,53 @@ def test_delegate_passes_parameters():
     assert call_args["temperature"] == 0.5
     assert call_args["top_p"] == 0.8
     assert call_args["top_k"] == 40
+
+def test_predict_without_history():
+    """Test prediction without message history."""
+    store = MockMessageStore()
+    mock_llm = Mock(spec=LLMProvider)
+    mock_llm.predict.return_value = "predicted completion"
+    
+    delegate = MessageStoreDelegateLLM(
+        delegate=mock_llm,
+        message_store=store,
+        num_messages=1
+    )
+    
+    result = delegate.predict("Hello")
+    
+    # Verify prediction is made without history
+    mock_llm.predict.assert_called_once_with(
+        partial_text="Hello",
+        max_length=None,
+        temperature=0.7
+    )
+    assert result == "predicted completion"
+
+def test_predict_passes_parameters():
+    """Test that prediction parameters are passed through."""
+    store = MockMessageStore()
+    mock_llm = Mock(spec=LLMProvider)
+    mock_llm.predict.return_value = "predicted completion"
+    
+    delegate = MessageStoreDelegateLLM(
+        delegate=mock_llm,
+        message_store=store,
+        num_messages=1
+    )
+    
+    delegate.predict(
+        partial_text="Hello",
+        max_length=50,
+        temperature=0.5
+    )
+    
+    # Verify parameters are passed correctly
+    mock_llm.predict.assert_called_once_with(
+        partial_text="Hello",
+        max_length=50,
+        temperature=0.5
+    )
 
 def test_delegate_with_partial_history():
     """Test when requesting more history than available."""

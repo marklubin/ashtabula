@@ -278,54 +278,92 @@ class HFWhisperSTTProvider(STTProvider):
             except Exception as e:
                 raise ValueError(f"Invalid audio file: {audio_source}. Error: {str(e)}") from e
 
-            # Process audio in chunks
-            all_text: List[str] = []
-
-            # For now, just process the entire audio file at once
             try:
-                # Ensure audio is float32 for consistent dtype
-                if audio.dtype != np.float32:
-                    audio = audio.astype(np.float32)
+                # Process audio in chunks for streaming
+                chunk_duration = self.config.chunk_length_s  # seconds
+                samples_per_chunk = int(chunk_duration * sr)
+                
+                # Split audio into chunks
+                chunks = [
+                    audio[i:i + samples_per_chunk]
+                    for i in range(0, len(audio), samples_per_chunk)
+                ]
+                
+                current_text = ""
+                for i, chunk in enumerate(chunks):
+                    try:
+                        # Ensure audio is float32
+                        if chunk.dtype != np.float32:
+                            chunk = chunk.astype(np.float32)
 
-                # Get features
-                if self.processor is None:
-                    raise RuntimeError("Processor not initialized")
-                input_features = self.processor(
-                    audio,
-                    sampling_rate=sr,
-                    return_tensors="pt"
-                ).input_features.to(self.device)
+                        # Get features
+                        if self.processor is None:
+                            raise RuntimeError("Processor not initialized")
+                        input_features = self.processor(
+                            chunk,
+                            sampling_rate=sr,
+                            return_tensors="pt"
+                        ).input_features.to(self.device)
 
-                # Forced language if specified
-                forced_decoder_ids: Optional[List[int]] = None
-                if self.config.language and self.processor is not None:
-                    forced_decoder_ids = self.processor.get_decoder_prompt_ids(
-                        language=self.config.language, task="transcribe"
-                    )
+                        # Forced language if specified
+                        forced_decoder_ids = None
+                        if self.config.language and self.processor is not None:
+                            forced_decoder_ids = self.processor.get_decoder_prompt_ids(
+                                language=self.config.language, task="transcribe"
+                            )
 
-                # Generate transcription
-                if self.model is None:
-                    raise RuntimeError("Model not initialized")
-                with torch.no_grad():
-                    generated_ids = self.model.generate(
-                        input_features,
-                        forced_decoder_ids=forced_decoder_ids
-                    )
+                        # Generate transcription
+                        if self.model is None:
+                            raise RuntimeError("Model not initialized")
+                        with torch.no_grad():
+                            generated_ids = self.model.generate(
+                                input_features,
+                                forced_decoder_ids=forced_decoder_ids,
+                                return_timestamps=True
+                            )
 
-                # Decode the transcription
-                if self.processor is None:
-                    raise RuntimeError("Processor not initialized")
-                transcription = self.processor.batch_decode(
-                    generated_ids,
-                    skip_special_tokens=True
-                )[0]
+                        # Decode the transcription
+                        if self.processor is None:
+                            raise RuntimeError("Processor not initialized")
+                        transcription = self.processor.batch_decode(
+                            generated_ids,
+                            skip_special_tokens=True
+                        )[0]
 
-                # Create a result
-                yield TranscriptionResult(
-                    text=transcription.strip(),
-                    is_final=True,
-                    language=self.config.language
-                )
+                        # Clean up transcription
+                        transcription = transcription.strip()
+                        
+                        # Always update current text, even if transcription is empty
+                        if transcription:
+                            current_text += transcription + " "
+                        
+                        # Always yield an intermediate result first
+                        yield TranscriptionResult(
+                            text=current_text.strip(),
+                            is_final=False,
+                            start_time=0,  # Accumulating text, so start from beginning
+                            end_time=(i + 1) * chunk_duration,
+                            language=self.config.language
+                        )
+                        
+                        # Check for sentence completion
+                        sentence_end_chars = {'.', '!', '?'}
+                        is_final = any(current_text.rstrip().endswith(char) for char in sentence_end_chars)
+                        
+                        if is_final:
+                            # Yield final result for completed sentence
+                            yield TranscriptionResult(
+                                text=current_text.strip(),
+                                is_final=True,
+                                start_time=0,
+                                end_time=(i + 1) * chunk_duration,
+                                language=self.config.language
+                            )
+                            current_text = ""  # Reset for next sentence
+
+                    except Exception as e:
+                        self.logger.error(f"Error processing chunk {i}: {e}")
+                        continue
 
             except Exception as e:
                 raise RuntimeError(f"Transcription failed: {e}")

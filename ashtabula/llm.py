@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, Dict, Any
 
 class LLMProvider(ABC):
     """Abstract base class for LLM providers."""
@@ -23,5 +23,23 @@ class LLMProvider(ABC):
             
         Returns:
             Generated text response
+        """
+        pass
+
+    @abstractmethod
+    def predict(self,
+               partial_text: str,
+               max_length: Optional[int] = None,
+               temperature: float = 0.7) -> str:
+        """
+        Predict how the user will complete their current sentence.
+        
+        Args:
+            partial_text: The incomplete sentence to predict completion for
+            max_length: Maximum length of predicted completion
+            temperature: Sampling temperature (0.0-1.0)
+            
+        Returns:
+            Predicted sentence completion
         """
         pass

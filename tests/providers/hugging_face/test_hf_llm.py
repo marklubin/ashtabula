@@ -123,3 +123,57 @@ class TestHuggingFaceLLMProvider:
                 device_map="auto"
             )
             assert provider.device == "cuda"
+
+    def test_predict_basic_completion(self, provider):
+        """Test basic sentence completion prediction."""
+        provider.tokenizer.decode.return_value = "This is an incomplete sentence and here is the completion"
+        
+        completion = provider.predict("This is an incomplete sentence")
+        
+        assert provider.model.generate.called
+        assert "completion" in completion
+        
+        call_kwargs = provider.model.generate.call_args[1]
+        assert call_kwargs["temperature"] == 0.7
+        assert call_kwargs["top_p"] == 0.9  # More focused sampling for completion
+        assert call_kwargs["top_k"] == 20   # More focused sampling for completion
+        assert call_kwargs["max_new_tokens"] == 50  # Default tokens for completion
+
+    def test_predict_with_parameters(self, provider):
+        """Test prediction with custom parameters."""
+        provider.tokenizer.decode.return_value = "Test input with custom completion"
+        
+        completion = provider.predict(
+            "Test input",
+            max_length=100,
+            temperature=0.5
+        )
+        
+        call_kwargs = provider.model.generate.call_args[1]
+        assert call_kwargs["max_new_tokens"] == 100
+        assert call_kwargs["temperature"] == 0.5
+
+    def test_predict_adds_punctuation(self, provider):
+        """Test that predictions add sentence-ending punctuation if missing."""
+        # Test cases without punctuation
+        provider.tokenizer.decode.return_value = "This is a completion without punctuation"
+        completion = provider.predict("This is incomplete")
+        assert completion.endswith('.')
+        
+        # Test cases with existing punctuation
+        provider.tokenizer.decode.return_value = "This already has punctuation!"
+        completion = provider.predict("This is incomplete")
+        assert completion.endswith('!')  # Should preserve existing punctuation
+
+    def test_predict_empty_input(self, provider):
+        """Test prediction with empty input."""
+        completion = provider.predict("")
+        assert completion == ""
+        assert not provider.model.generate.called
+
+    def test_predict_error_handling(self, provider):
+        """Test error handling during prediction."""
+        provider.model.generate.side_effect = Exception("Prediction failed")
+        
+        with pytest.raises(RuntimeError, match="Failed to predict completion"):
+            provider.predict("Test input")

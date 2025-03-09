@@ -479,30 +479,82 @@ class TestSTTProvider:
     @pytest.mark.asyncio
     async def test_paused_speech(self, stt_provider):
         """
-        Tests handling of pauses in speech.
+        Tests handling of pauses in speech and sentence completion detection.
         
-        Verifies that the provider correctly maintains context across
-        natural pauses in speech, without premature finalization.
+        Verifies that the provider:
+        1. Correctly maintains context across natural pauses in speech
+        2. Properly detects sentence boundaries
+        3. Sets is_final flag appropriately for completed sentences
         
         Expected outcomes:
         - Final transcription correctly includes text from both sides of pauses
         - Timing analysis shows appropriate processing of pauses
+        - Sentence completion is properly detected and flagged
         """
         test_file = TEST_WAV_DIR / "2-paused-speech.wav"
         expected = EXPECTED_TRANSCRIPTS["2-paused-speech.wav"]
         
-        # Get transcription and metrics
-        transcription, metrics = await analyze_transcription_stream(stt_provider, test_file)
+        # Track sentence completions
+        sentence_completions = []
+        intermediate_results = []
         
-        # Calculate word error rate
-        error_rate = word_error_rate(expected, transcription)
+        # Stream and analyze results
+        async for result in stt_provider.stream_audio(str(test_file)):
+            # Extract is_final flag and text from different result formats
+            is_final = (
+                result.is_final if hasattr(result, 'is_final')
+                else result.get('is_final', False) if isinstance(result, dict)
+                else False
+            )
+            
+            text = (
+                result.text if hasattr(result, 'text')
+                else result['text'] if isinstance(result, dict)
+                else str(result)
+            )
+            
+            if is_final:
+                sentence_completions.append(text)
+            else:
+                intermediate_results.append(text)
+        
+        # Verify sentence completion detection
+        assert len(sentence_completions) > 0, (
+            "No sentence completions detected in paused speech"
+        )
+        
+        # Verify that each completed sentence ends with a sentence-ending character
+        for sentence in sentence_completions:
+            assert any(sentence.rstrip().endswith(char) for char in {'.', '!', '?'}), (
+                f"Completed sentence does not end with proper punctuation: {sentence}"
+            )
+        
+        # Verify we get intermediate results
+        assert len(intermediate_results) > 0, (
+            "Expected intermediate results before sentence completion"
+        )
+        
+        # Verify intermediate results show progression
+        for i in range(1, len(intermediate_results)):
+            # Each intermediate result should be longer than or equal to the previous one
+            assert len(intermediate_results[i]) >= len(intermediate_results[i-1]), (
+                "Expected intermediate results to show text progression"
+            )
         
         # Verify transcription accuracy
+        final_transcription = " ".join(sentence_completions)
+        error_rate = word_error_rate(expected, final_transcription)
+        
         assert error_rate <= MAX_WER["paused_speech.wav"], (
             f"Paused speech transcription failed with WER {error_rate:.2f}, "
             f"exceeding threshold of {MAX_WER['paused_speech.wav']:.2f}.\n"
             f"Expected: {expected}\n"
-            f"Got: {transcription}"
+            f"Got: {final_transcription}"
+        )
+        
+        # Verify intermediate results exist
+        assert len(intermediate_results) > 0, (
+            "No intermediate results received during transcription"
         )
     
     @pytest.mark.asyncio

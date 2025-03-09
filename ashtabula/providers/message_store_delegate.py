@@ -66,3 +66,25 @@ class MessageStoreDelegateLLM(LLMProvider):
             top_p=top_p,
             top_k=top_k
         )
+
+    def predict(self,
+               partial_text: str,
+               max_length: Optional[int] = None,
+               temperature: float = 0.7) -> str:
+        """
+        Predict completion using the delegate LLM.
+        
+        Args:
+            partial_text: The incomplete sentence to predict completion for
+            max_length: Maximum length of predicted completion
+            temperature: Sampling temperature (0.0-1.0)
+            
+        Returns:
+            Predicted sentence completion
+        """
+        # For predictions, we don't include message history to keep completions focused
+        return self.delegate.predict(
+            partial_text=partial_text,
+            max_length=max_length,
+            temperature=temperature
+        )

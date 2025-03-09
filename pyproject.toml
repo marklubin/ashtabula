@@ -4,23 +4,61 @@ version = "0.1.0"
 description = "Ashtabula AI framework"
 authors = [{ name ="Mark Lubin", email = "mark@niteshift.ai" }]
 dependencies = [
-    "transformers",
-    "torch",
-    "librosa",
-    "soundfile",
-    "accelerate",
-    "pytest",
-    "pytest-asyncio",
-    "mypy",
-    "ruff",
-    "flake8",
-    "pylint",
-    "bandit"
+    "transformers>=4.36.0",
+    "torch>=2.1.0",
+    "librosa>=0.10.1",
+    "soundfile>=0.12.1",
+    "accelerate>=0.25.0",
+    "numpy>=1.24.0",
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.23.0",
+    "mypy>=1.7.0",
+    "ruff>=0.1.9",
+    "flake8>=6.1.0",
+    "pylint>=3.0.0",
+    "bandit>=1.7.0",
+    "huggingface_hub>=0.20.0"
 ]
-requires-python = ">=3.8"
-
+requires-python = ">=3.8.1"
 
 [project.scripts]
-run = "ashtabula.main:run"  # Example script entry
-test = "pytest tests/"  # Runs pytest
-download-models = "scripts.download_mistral:download_mistral"
+# Main application commands
+run = "ashtabula.main:run"
+
+# Development commands
+test = "pytest tests/"
+
+# Model management
+# Run this before running tests or using the application
+download-models = "scripts.download_models:main"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+check_untyped_defs = true
+
+[tool.ruff]
+line-length = 88
+target-version = "py38"
+select = ["E", "F", "B", "I"]
+
+[project.readme]
+file = "README.md"
+content-type = "text/markdown"
+
+[project.urls]
+repository = "https://github.com/niteshift-ai/ashtabula"
+
+[project.license]
+text = "MIT"
+
+# Note: Before running tests, you must download the required models:
+# python -m scripts.download_models
