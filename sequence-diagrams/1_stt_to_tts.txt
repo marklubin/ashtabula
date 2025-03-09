@@ -1,0 +1,10 @@
+title Real-time STT to AI Response Flow
+
+User->>STT Provider: Speak input
+STT Provider->>Buffer Manager: Transcribe text in 1s chunks
+Buffer Manager->>LLM Provider: Predict sentence completion
+LLM Provider->>Buffer Manager: Return predicted sentence
+Buffer Manager->>TTS Provider: Hold response if user continues speaking
+User-->>Buffer Manager: Stops speaking (Silence detected)
+Buffer Manager->>TTS Provider: Send AI response to be spoken
+TTS Provider->>User: Speak AI-generated response

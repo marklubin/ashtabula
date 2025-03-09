@@ -1,0 +1,26 @@
+[project]
+name = "ashtabula"
+version = "0.1.0"
+description = "Ashtabula AI framework"
+authors = [{ name ="Mark Lubin", email = "mark@niteshift.ai" }]
+dependencies = [
+    "transformers",
+    "torch",
+    "librosa",
+    "soundfile",
+    "accelerate",
+    "pytest",
+    "pytest-asyncio",
+    "mypy",
+    "ruff",
+    "flake8",
+    "pylint",
+    "bandit"
+]
+requires-python = ">=3.8"
+
+
+[project.scripts]
+run = "ashtabula.main:run"  # Example script entry
+test = "pytest tests/"  # Runs pytest
+download-models = "scripts.download_mistral:download_mistral"

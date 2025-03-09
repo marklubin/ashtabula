@@ -1,0 +1,563 @@
+"""
+BlackBox Test Suite for Ashtabula WebSocket Server
+
+This test suite validates the WebSocket server's external behavior without relying on internal 
+implementation details. It tests the complete conversation flow from client connection through 
+audio streaming, text processing, and response delivery.
+
+Key testing principles:
+1. All tests interact only with the public API
+2. Tests validate behavior, not implementation
+3. Mocks are used only for external dependencies, not internal components
+4. Tests cover both happy paths and error scenarios
+5. All assertions are against observable outputs
+
+Author: Claude
+Date: March 7, 2025
+"""
+
+import pytest
+import asyncio
+import websockets  # type: ignore
+import json
+import os
+import base64
+import wave
+from unittest.mock import patch, MagicMock
+
+# Constants for test configuration
+TEST_HOST = "localhost"
+TEST_PORT = 8765  # Using different port than production for isolation
+AUDIO_CHUNK_SIZE = 4096  # Bytes per audio chunk for streaming tests
+TEST_TIMEOUT = 15  # Seconds before test aborts
+
+
+@pytest.fixture
+async def websocket_server():
+    """
+    Fixture that sets up and tears down the WebSocket server for testing.
+    Returns a running server instance that tests can connect to.
+    """
+    # Import here to avoid implementation coupling in the test file
+    from ashtabula.websocket import WebSocketServer
+    
+    # Create server with test configuration
+    server = WebSocketServer(host=TEST_HOST, port=TEST_PORT)
+    
+    # Start server in background task
+    server_task = asyncio.create_task(server.start())
+    
+    # Give server time to initialize
+    await asyncio.sleep(0.5)
+    
+    yield server
+    
+    # Cleanup: Stop server and cancel task
+    await server.stop()
+    server_task.cancel()
+    try:
+        await server_task
+    except asyncio.CancelledError:
+        pass
+
+
+@pytest.fixture
+def sample_audio_file():
+    """
+    Fixture that provides path to a sample audio file for testing.
+    Creates a simple WAV file if none exists.
+    """
+    test_file_path = os.path.join(os.path.dirname(__file__), "test_audio.wav")
+    
+    # Create test audio file if it doesn't exist
+    if not os.path.exists(test_file_path):
+        with wave.open(test_file_path, 'wb') as wave_file:
+            wave_file.setnchannels(1)
+            wave_file.setsampwidth(2)
+            wave_file.setframerate(16000)
+            # Generate 1 second of silent audio (all zeros)
+            wave_file.writeframes(b'\x00' * 32000)
+    
+    return test_file_path
+
+
+async def connect_client():
+    """Helper function to create and return a client connection"""
+    uri = f"ws://{TEST_HOST}:{TEST_PORT}"
+    return await websockets.connect(uri)
+
+
+class TestWebSocketServer:
+    """Test suite for the WebSocket server's external interface."""
+
+    @pytest.mark.asyncio
+    async def test_connection_establishment(self, websocket_server):
+        """
+        Test that clients can successfully connect to the WebSocket server.
+        
+        Verifies:
+        - Connection can be established
+        - Server sends expected welcome message
+        - Connection can be closed gracefully
+        """
+        # Connect to the server
+        client = await connect_client()
+        
+        try:
+            # Server should send welcome message
+            welcome = await asyncio.wait_for(client.recv(), timeout=TEST_TIMEOUT)
+            welcome_data = json.loads(welcome)
+            
+            # Verify welcome message structure
+            assert "type" in welcome_data
+            assert welcome_data["type"] == "connection_established"
+            assert "session_id" in welcome_data
+        finally:
+            # Cleanup
+            await client.close()
+
+    @pytest.mark.asyncio
+    async def test_audio_streaming(self, websocket_server, sample_audio_file):
+        """
+        Test streaming audio chunks to the server and receiving transcription.
+        
+        Verifies:
+        - Server accepts audio chunks
+        - Server returns transcription results
+        - Transcription has expected format
+        """
+        client = await connect_client()
+        
+        try:
+            # Skip welcome message
+            await client.recv()
+            
+            # Read audio file in chunks
+            with open(sample_audio_file, "rb") as audio_file:
+                # Send start streaming message
+                await client.send(json.dumps({
+                    "type": "start_audio_stream",
+                    "format": "wav",
+                    "sample_rate": 16000
+                }))
+                
+                # Stream audio chunks
+                while chunk := audio_file.read(AUDIO_CHUNK_SIZE):
+                    await client.send(json.dumps({
+                        "type": "audio_chunk",
+                        "data": base64.b64encode(chunk).decode('utf-8')
+                    }))
+                    
+                    # Small delay to prevent flooding
+                    await asyncio.sleep(0.01)
+                
+                # Send end of stream message
+                await client.send(json.dumps({
+                    "type": "end_audio_stream"
+                }))
+            
+            # Wait for transcription response
+            response = await asyncio.wait_for(client.recv(), timeout=TEST_TIMEOUT)
+            response_data = json.loads(response)
+            
+            # Verify transcription response format
+            assert "type" in response_data
+            assert response_data["type"] in ["partial_transcription", "final_transcription"]
+            assert "text" in response_data
+        finally:
+            await client.close()
+
+    @pytest.mark.asyncio
+    async def test_text_input(self, websocket_server):
+        """
+        Test sending text input directly instead of audio.
+        
+        Verifies:
+        - Server accepts direct text input
+        - Server processes and responds accordingly
+        - Response has expected format
+        """
+        client = await connect_client()
+        
+        try:
+            # Skip welcome message
+            await client.recv()
+            
+            # Send text input
+            test_input = "Hello, this is a test message."
+            await client.send(json.dumps({
+                "type": "text_input",
+                "text": test_input
+            }))
+            
+            # Wait for AI response
+            response = await asyncio.wait_for(client.recv(), timeout=TEST_TIMEOUT)
+            response_data = json.loads(response)
+            
+            # Verify response format
+            assert "type" in response_data
+            assert response_data["type"] == "ai_response"
+            assert "text" in response_data
+        finally:
+            await client.close()
+
+    @pytest.mark.asyncio
+    async def test_interruption(self, websocket_server):
+        """
+        Test interrupting an AI response with new user input.
+        
+        Verifies:
+        - Server handles interruption signal
+        - Server stops current response
+        - Server processes new input after interruption
+        """
+        client = await connect_client()
+        
+        try:
+            # Skip welcome message
+            await client.recv()
+            
+            # Send initial prompt that would generate a long response
+            await client.send(json.dumps({
+                "type": "text_input",
+                "text": "Tell me a long story about space exploration."
+            }))
+            
+            # Wait for AI to start responding
+            response = await asyncio.wait_for(client.recv(), timeout=TEST_TIMEOUT)
+            response_data = json.loads(response)
+            
+            # Verify beginning of response
+            assert response_data["type"] == "ai_response_start"
+            
+            # Send interruption with new input
+            await client.send(json.dumps({
+                "type": "interrupt",
+                "new_text": "Actually, tell me about quantum computing instead."
+            }))
+            
+            # Look for interrupted confirmation
+            interrupt_confirmed = False
+            new_topic_received = False
+            
+            # Check for both interrupted confirmation and new topic
+            for _ in range(5):  # Try a few times to get both messages
+                msg = await asyncio.wait_for(client.recv(), timeout=TEST_TIMEOUT)
+                msg_data = json.loads(msg)
+                
+                if msg_data.get("type") == "ai_response_interrupted":
+                    interrupt_confirmed = True
+                
+                if msg_data.get("type") == "ai_response" and "quantum" in msg_data.get("text", "").lower():
+                    new_topic_received = True
+                
+                if interrupt_confirmed and new_topic_received:
+                    break
+                    
+            assert interrupt_confirmed, "Server did not confirm interruption"
+            assert new_topic_received, "Server did not respond to new topic after interruption"
+        finally:
+            await client.close()
+
+    @pytest.mark.asyncio
+    async def test_multiple_clients(self, websocket_server):
+        """
+        Test server handling multiple simultaneous client connections.
+        
+        Verifies:
+        - Server maintains separate sessions for each client
+        - Responses go to the correct clients
+        - Server performance under multiple connections
+        """
+        # Connect multiple clients
+        clients = [await connect_client() for _ in range(3)]
+        session_ids = []
+        
+        try:
+            # Get welcome messages and extract session IDs
+            for client in clients:
+                welcome = await asyncio.wait_for(client.recv(), timeout=TEST_TIMEOUT)
+                welcome_data = json.loads(welcome)
+                session_ids.append(welcome_data["session_id"])
+            
+            # Verify all session IDs are unique
+            assert len(set(session_ids)) == len(session_ids), "Session IDs are not unique"
+            
+            # Send different messages from each client
+            test_messages = [
+                "Hello from client one.",
+                "This is client two speaking.",
+                "Client three here with a message."
+            ]
+            
+            for i, client in enumerate(clients):
+                await client.send(json.dumps({
+                    "type": "text_input",
+                    "text": test_messages[i]
+                }))
+            
+            # Collect responses
+            responses = []
+            for client in clients:
+                response = await asyncio.wait_for(client.recv(), timeout=TEST_TIMEOUT)
+                responses.append(json.loads(response))
+            
+            # Verify each client got a response
+            assert len(responses) == len(clients)
+            
+            # Each response should be an AI response with text
+            for response in responses:
+                assert response["type"] == "ai_response"
+                assert "text" in response
+        finally:
+            # Close all clients
+            for client in clients:
+                await client.close()
+
+    @pytest.mark.asyncio
+    async def test_error_handling(self, websocket_server):
+        """
+        Test server's handling of malformed requests and error conditions.
+        
+        Verifies:
+        - Server responds appropriately to invalid messages
+        - Error responses have expected format
+        - Server remains operational after errors
+        """
+        client = await connect_client()
+        
+        try:
+            # Skip welcome message
+            await client.recv()
+            
+            # Send malformed JSON
+            await client.send("This is not valid JSON")
+            
+            # Server should respond with error
+            response = await asyncio.wait_for(client.recv(), timeout=TEST_TIMEOUT)
+            response_data = json.loads(response)
+            
+            assert response_data["type"] == "error"
+            assert "message" in response_data
+            
+            # Send message with missing required fields
+            await client.send(json.dumps({
+                "type": "text_input"
+                # Missing "text" field
+            }))
+            
+            # Server should respond with error
+            response = await asyncio.wait_for(client.recv(), timeout=TEST_TIMEOUT)
+            response_data = json.loads(response)
+            
+            assert response_data["type"] == "error"
+            assert "message" in response_data
+            
+            # Verify server is still operational after errors
+            await client.send(json.dumps({
+                "type": "text_input",
+                "text": "Is the server still working?"
+            }))
+            
+            response = await asyncio.wait_for(client.recv(), timeout=TEST_TIMEOUT)
+            response_data = json.loads(response)
+            
+            assert response_data["type"] == "ai_response"
+            assert "text" in response_data
+            
+        finally:
+            await client.close()
+
+    @pytest.mark.asyncio
+    async def test_server_shutdown(self, websocket_server):
+        """
+        Test graceful shutdown of the server.
+        
+        Verifies:
+        - Clients receive closure notification
+        - New connections are rejected after shutdown
+        - Server terminates cleanly
+        """
+        # Connect a client
+        client = await connect_client()
+        
+        try:
+            # Skip welcome message
+            await client.recv()
+            
+            # Trigger server shutdown
+            shutdown_task = asyncio.create_task(websocket_server.stop())
+            
+            # Wait for closure notification or connection drop
+            with pytest.raises(websockets.exceptions.ConnectionClosed):
+                await asyncio.wait_for(client.recv(), timeout=TEST_TIMEOUT)
+                
+            # Ensure shutdown completed
+            await shutdown_task
+            
+            # Try to connect again - should fail
+            with pytest.raises(ConnectionRefusedError):
+                await websockets.connect(f"ws://{TEST_HOST}:{TEST_PORT}")
+                
+        except Exception as e:
+            # Cleanup in case of test failure
+            if not client.closed:
+                await client.close()
+            raise e
+
+    @pytest.mark.asyncio
+    @patch('ashtabula.websocket.WebSocketServer._process_audio')
+    async def test_audio_processing_timeout(self, mock_process_audio, websocket_server):
+        """
+        Test handling of timeouts during audio processing.
+        
+        Verifies:
+        - Server detects when audio processing takes too long
+        - Server responds with appropriate timeout error
+        - Client connection remains intact
+        """
+        # Configure mock to simulate timeout
+        mock_process_audio.side_effect = asyncio.TimeoutError("Processing took too long")
+        
+        client = await connect_client()
+        
+        try:
+            # Skip welcome message
+            await client.recv()
+            
+            # Send audio data that will trigger the timeout
+            await client.send(json.dumps({
+                "type": "start_audio_stream",
+                "format": "wav",
+                "sample_rate": 16000
+            }))
+            
+            # Send a dummy audio chunk
+            await client.send(json.dumps({
+                "type": "audio_chunk",
+                "data": base64.b64encode(b'\x00' * 1000).decode('utf-8')
+            }))
+            
+            # End the stream
+            await client.send(json.dumps({
+                "type": "end_audio_stream" 
+            }))
+            
+            # Server should respond with timeout error
+            response = await asyncio.wait_for(client.recv(), timeout=TEST_TIMEOUT)
+            response_data = json.loads(response)
+            
+            assert response_data["type"] == "error"
+            assert "timeout" in response_data["message"].lower()
+            
+            # Verify client can still send messages after timeout
+            await client.send(json.dumps({
+                "type": "text_input",
+                "text": "Is the connection still working?"
+            }))
+            
+            response = await asyncio.wait_for(client.recv(), timeout=TEST_TIMEOUT)
+            response_data = json.loads(response)
+            
+            assert response_data["type"] == "ai_response"
+            
+        finally:
+            await client.close()
+
+    @pytest.mark.asyncio
+    async def test_conversation_context_retention(self, websocket_server):
+        """
+        Test that the server maintains conversation context between messages.
+        
+        Verifies:
+        - Server remembers previous exchanges in a session
+        - Responses reflect awareness of conversation history
+        - Context is maintained per-client
+        """
+        client = await connect_client()
+        
+        try:
+            # Skip welcome message
+            await client.recv()
+            
+            # First message establishes context
+            await client.send(json.dumps({
+                "type": "text_input",
+                "text": "My name is Alice."
+            }))
+            
+            # Get and discard first response
+            await asyncio.wait_for(client.recv(), timeout=TEST_TIMEOUT)
+            
+            # Second message references the context
+            await client.send(json.dumps({
+                "type": "text_input",
+                "text": "What's my name?"
+            }))
+            
+            # Response should include the name from context
+            response = await asyncio.wait_for(client.recv(), timeout=TEST_TIMEOUT)
+            response_data = json.loads(response)
+            
+            assert response_data["type"] == "ai_response"
+            assert "Alice" in response_data["text"]
+            
+        finally:
+            await client.close()
+
+    @pytest.mark.asyncio
+    async def test_streaming_response(self, websocket_server):
+        """
+        Test that AI responses can be streamed in chunks rather than delivered all at once.
+        
+        Verifies:
+        - Server sends streaming response with correct markers
+        - Stream begins with start marker
+        - Multiple chunks arrive in sequence
+        - Stream ends with completion marker
+        """
+        client = await connect_client()
+        
+        try:
+            # Skip welcome message
+            await client.recv()
+            
+            # Request that should trigger a long, streaming response
+            await client.send(json.dumps({
+                "type": "text_input",
+                "text": "Write a paragraph about artificial intelligence.",
+                "stream_response": True  # Request streaming
+            }))
+            
+            # Track stream progress
+            stream_started = False
+            chunks_received = 0
+            stream_completed = False
+            
+            # Collect streaming responses with timeout
+            start_time = asyncio.get_event_loop().time()
+            while (asyncio.get_event_loop().time() - start_time) < TEST_TIMEOUT:
+                response = await client.recv()
+                response_data = json.loads(response)
+                
+                # Check message type
+                if response_data["type"] == "ai_response_start":
+                    stream_started = True
+                elif response_data["type"] == "ai_response_chunk":
+                    chunks_received += 1
+                    assert "text" in response_data
+                elif response_data["type"] == "ai_response_complete":
+                    stream_completed = True
+                    break
+            
+            # Verify streaming behavior
+            assert stream_started, "Stream didn't start properly"
+            assert chunks_received > 0, "No stream chunks received"
+            assert stream_completed, "Stream didn't complete"
+            
+        finally:
+            await client.close()
+
+
+if __name__ == "__main__":
+    pytest.main(["-xvs", __file__])

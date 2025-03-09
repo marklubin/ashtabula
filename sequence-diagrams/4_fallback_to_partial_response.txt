@@ -1,0 +1,12 @@
+title AI Falls Back to Partial Response If Confidence < 80%
+
+User->>STT Provider: Speak input
+STT Provider->>Buffer Manager: Transcribe text in 1s chunks
+Buffer Manager->>LLM Provider: Predict sentence completion
+LLM Provider->>Buffer Manager: AI predicts next words (Confidence < 80%)
+Buffer Manager->>TTS Provider: Hold response, wait for more input
+User-->>Buffer Manager: Stops speaking (Silence detected)
+Buffer Manager->>LLM Provider: Generate full response based on final input
+LLM Provider->>Buffer Manager: Return full AI response
+Buffer Manager->>TTS Provider: Speak full AI-generated response
+TTS Provider->>User: Deliver AI-generated speech

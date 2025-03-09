@@ -1,0 +1,12 @@
+title Handling STT or AI Processing Failures
+
+User->>STT Provider: Speak input
+STT Provider->X Buffer Manager: STT fails (no transcription)
+STT Provider->>Error Handler: Notify of STT failure
+Error Handler->>User: "I couldn't understand, can you repeat that?"
+
+User->>STT Provider: Speak input again
+STT Provider->>Buffer Manager: Transcribe text in 1s chunks
+Buffer Manager->X LLM Provider: AI model fails to generate response
+LLM Provider->>Error Handler: Notify of AI failure
+Error Handler->>User: "I couldn't process your request, try again."

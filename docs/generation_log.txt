@@ -1,0 +1,25 @@
+# Generation Log for Ashtabula
+
+## Inspiration
+This project was inspired by the **Hugging Face** sticker found at a co-working space, reinforcing alignment with open-source AI.
+
+## Original References & Prompts Used
+1. **Project structure inspired by AI-Convo.**
+2. **STT/LLM/TTS design built for real-time AI conversation systems.**
+3. **Naming and branding influenced by historical mission-style architecture.**
+4. **Technical design follows event-driven WebSocket AI streaming.**
+5. **Inspired by Kwaai and SCaLE22x AI initiatives in Pasadena.**
+
+## Generation Notes
+- Project structure mirrors best practices for open-source AI frameworks.
+- Ensured modularity to support future AI model integrations.
+- WebSocket and buffer logic designed for low-latency response handling.
+- Test cases cover core AI interaction scenarios.
+- Included basic implementations while allowing extensibility.
+
+## Next Steps
+1. Develop a real-time demo for Ashtabula.
+2. Integrate additional AI providers (Claude, self-hosted models).
+3. Expand documentation with usage examples.
+
+Generated on: (Timestamp here)
