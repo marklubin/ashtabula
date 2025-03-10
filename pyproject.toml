@@ -2,6 +2,31 @@
 requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "ashtabula"
+version = "0.1.0"
+description = "Ashtabula AI framework"
+authors = [{ name ="Mark Lubin", email = "mark@niteshift.ai" }]
+dependencies = [
+    "transformers>=4.36.0",
+    "torch>=2.1.0",
+    "librosa>=0.10.1",
+    "soundfile>=0.12.1",
+    "accelerate>=0.25.0", 
+    "numpy>=1.24.0",
+    "websockets>=13.1",
+    "transitions>=0.9.0",
+    "sounddevice>=0.5.1",
+]
+requires-python = ">=3.8.1"
+
+[project.urls]
+repository = "https://github.com/niteshift-ai/ashtabula"
+
+[project.scripts]
+ashtabula = "ashtabula.main:run"
+ashtabula-download-models = "scripts.download_models:main"
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

@@ -20,8 +20,8 @@ Ashtabula is an AI framework that integrates speech-to-text, text-to-speech, and
 ### From PyPI (coming soon)
 
 ```bash
-# Install from PyPI
-pip install ashtabula
+# Install from PyPI using uv
+uv pip install ashtabula
 ```
 
 ### From Source
@@ -37,11 +37,33 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 uv pip install -e .
 ```
 
+### Development Environment
+
+**IMPORTANT: Always use uv for all Python-related commands in this project.**
+
+```bash
+# Add dependencies
+uv add numpy transitions sounddevice
+
+# Install dev dependencies
+uv pip install pytest pytest-asyncio mypy
+
+# Run commands with uv run
+uv run python -m ashtabula.main
+uv run pytest tests/
+uv run mypy ashtabula/
+
+# Instead of direct Python commands like:
+# python -m pytest   (❌ WRONG)
+# Use uv run:
+# uv run pytest      (✅ CORRECT)
+```
+
 ### Building the Package
 
 ```bash
-# Build the package
-python scripts/build_package.py
+# Build the package with uv
+uv run python scripts/build_package.py
 ```
 
 ## Important: Download Models
