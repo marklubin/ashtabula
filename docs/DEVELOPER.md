@@ -203,33 +203,43 @@ v
 
 ---
 
-### 2.5 Conversation Manager (`ashtabula/conversation.py`)
+### 2.5 Conversation Manager (`ashtabula/conversation.py`, `ashtabula/conversation_fsm.py`)
 
 **Purpose**:
 - Orchestrate the entire pipeline flow: from partial transcription to final LLM response selection.
 - Manage comparisons between the final utterance embedding and stored predicted embeddings.
+- Implement state machine to manage conversation flow with well-defined states and transitions.
 
 **Implementation Guide**:
-1. **Incremental Updates**:
+1. **State Machine Architecture** (`conversation_fsm.py`):
+   - Implement as a Finite State Machine using the `transitions` library
+   - Define clear states: IDLE, LISTENING, SPEECH_ACTIVE, PROCESSING_UTTERANCE, GENERATING_RESPONSE, SPEAKING, INTERRUPTED
+   - Create transitions between states with appropriate handlers
+2. **Incremental Updates**:
    - For each partial transcription, optionally generate or retrieve partial responses for quick feedback.
-2. **Final Utterance Embedding**:
+3. **1-Second Timeslice Processing**:
+   - Process Whisper STT output in 1-second chunks
+   - Generate predictions for partial utterances to preload responses
+4. **Final Utterance Embedding**:
    - On VAD finalization, compute the embedding of the final utterance.
-3. **Prediction Matching**:
-   - Compare with stored partial predictions via cosine similarity. If a match is found (`distance < K`), use the stored response. Otherwise, generate a new response.
-4. **Reset Session**:
+5. **Prediction Matching**:
+   - Compare with stored partial predictions via similarity matching. If a match is found (`similarity > threshold`), use the stored response. Otherwise, generate a new response.
+6. **Reset Session**:
    - Once a final response is rendered by TTS, clear the session for the next utterance.
 
 **Test Strategy**:
 - **Unit Tests**:
   - Check the logic for computing embeddings and matching predictions.
+  - Validate state transitions in the FSM
 - **Integration**:
   - Test a multi-utterance conversation to confirm session resets properly and transitions are correct.
 - **Stress/Load**:
   - Evaluate system stability under many concurrent users and long utterances.
 
 **Developer Docs**:
+- **State Machine**: Document the states, transitions, and event handlers in the FSM.
 - **Embedding Method**: Document which embedding model is used and how to configure it.
-- **Matching Criteria**: Include an explanation of the `K` threshold and how it can be tuned.
+- **Matching Criteria**: Include an explanation of the similarity threshold and how it can be tuned.
 
 ---
 

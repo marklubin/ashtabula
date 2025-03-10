@@ -1,18 +1,30 @@
 ![logo](https://github.com/user-attachments/assets/f98ef082-8d07-4c0f-99a1-578e1c091437)
 # Ashtabula AI Framework
 
-Ashtabula is an AI framework that integrates speech-to-text, text-to-speech, and language model capabilities using state-of-the-art models from Hugging Face.
+Ashtabula is an AI framework that integrates speech-to-text, text-to-speech, and language model capabilities using state-of-the-art models from Hugging Face, with a focus on real-time conversational AI.
 
 ## Features
 
 - Speech-to-Text using Whisper
-- Text-to-Speech using Parler TTS
-- Language Model using Phi-2
+- Text-to-Speech using Parler TTS and SpeechT5
+- Language Model using Phi-2 and other HuggingFace models
+- Real-time audio processing with 1-second incremental chunks
+- Sentence prediction for faster responses
+- Finite State Machine (FSM) implementation for conversation flow
 - Streaming transcription support
 - Multiple speaker and emotion options for TTS
 - Local model support for offline usage
 
 ## Installation
+
+### From PyPI (coming soon)
+
+```bash
+# Install from PyPI
+pip install ashtabula
+```
+
+### From Source
 
 ```bash
 # Clone the repository
@@ -23,6 +35,13 @@ cd ashtabula
 uv venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 uv pip install -e .
+```
+
+### Building the Package
+
+```bash
+# Build the package
+python scripts/build_package.py
 ```
 
 ## Important: Download Models
@@ -88,6 +107,20 @@ response = await llm_provider.generate(
     temperature=0.7
 )
 ```
+
+## Architecture
+
+Ashtabula uses a state machine design to model the conversation flow:
+
+1. **IDLE**: No active conversation
+2. **LISTENING**: Receiving audio but no speech detected
+3. **SPEECH_ACTIVE**: Active speech being transcribed
+4. **PROCESSING_UTTERANCE**: Processing complete utterance
+5. **GENERATING_RESPONSE**: Generating response with LLM
+6. **SPEAKING**: Delivering response to user
+7. **INTERRUPTED**: User interrupted the flow
+
+The system processes 1-second audio chunks, performs predictions on partial utterances, and generates responses based on these predictions for faster interaction.
 
 ## License
 

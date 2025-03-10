@@ -1,37 +1,6 @@
-[project]
-name = "ashtabula"
-version = "0.1.0"
-description = "Ashtabula AI framework"
-authors = [{ name ="Mark Lubin", email = "mark@niteshift.ai" }]
-dependencies = [
-    "transformers>=4.36.0",
-    "torch>=2.1.0",
-    "librosa>=0.10.1",
-    "soundfile>=0.12.1",
-    "accelerate>=0.25.0",
-    "numpy>=1.24.0",
-    "pytest>=7.4.0",
-    "pytest-asyncio>=0.23.0",
-    "mypy>=1.7.0",
-    "ruff>=0.1.9",
-    "flake8>=6.1.0",
-    "pylint>=3.0.0",
-    "bandit>=1.7.0",
-    "huggingface_hub>=0.20.0",
-    "websockets>=13.1",
-]
-requires-python = ">=3.8.1"
-
-[project.scripts]
-# Main application commands
-run = "ashtabula.main:run"
-
-# Development commands
-test = "pytest tests/"
-
-# Model management
-# Run this before running tests or using the application
-download-models = "scripts.download_models:main"
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -49,17 +18,9 @@ check_untyped_defs = true
 [tool.ruff]
 line-length = 88
 target-version = "py38"
+
+[tool.ruff.lint]
 select = ["E", "F", "B", "I"]
-
-[project.readme]
-file = "README.md"
-content-type = "text/markdown"
-
-[project.urls]
-repository = "https://github.com/niteshift-ai/ashtabula"
-
-[project.license]
-text = "MIT"
 
 # Note: Before running tests, you must download the required models:
 # python -m scripts.download_models
