@@ -193,7 +193,7 @@ v
 - **Unit Tests**:
   - Confirm correct text output for short test WAV files in `tests/test_wav`.
 - **Integration Tests**:
-  - Combine with WebSocket + VAD to ensure the end-to-end pipeline works for real-time scenarios.
+  - Combine with WebSocket + VAD to ensure the end-to-end pipeline works for real-time scenarios.  
 - **Accuracy Checks**:
   - Evaluate the transcription quality and measure Word Error Rate (WER) on known test sets.
 
