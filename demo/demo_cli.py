@@ -39,7 +39,7 @@ logger = logging.getLogger("ashtabula-demo")
 # Global variables
 running = True
 fsm = None
-audio_chunks = []
+audio_chunks = None  # Will be initialized in main_loop
 sample_rate = 16000  # Hz
 chunk_duration = 1.0  # seconds
 chunk_size = int(sample_rate * chunk_duration)
@@ -167,15 +167,23 @@ def audio_callback(indata, frames, time_info, status):
     if status:
         print(f"\r⚠️ Stream status: {status}", end='', flush=True)
     
-    # Instead of trying to run the coroutine directly, just add the chunk to a queue
-    # that the main thread will process
-    audio_data = indata.copy().flatten()
-    
-    # Append to our global audio chunks list - the main loop will process these
-    audio_chunks.append(audio_data)
-    
-    # Simple status update about buffered audio
-    print(f"\r🔄 Audio chunk buffered, {len(audio_chunks)} chunks pending", end='', flush=True)
+    try:
+        # Instead of trying to run the coroutine directly, just add the chunk to a queue
+        # that the main thread will process
+        audio_data = indata.copy().flatten()
+        
+        # Ensure audio_chunks is initialized
+        if audio_chunks is None:
+            audio_chunks = []
+            
+        # Append to our global audio chunks list - the main loop will process these
+        audio_chunks.append(audio_data)
+        
+        # Simple status update about buffered audio
+        chunk_count = len(audio_chunks) if audio_chunks is not None else 0
+        print(f"\r🔄 Audio chunk buffered, {chunk_count} chunks pending", end='', flush=True)
+    except Exception as e:
+        print(f"\r⚠️ Error in audio callback: {e}", end='', flush=True)
 
 
 # Global TTS provider to avoid loading model multiple times
@@ -264,7 +272,10 @@ async def play_response(text: str):
 
 async def main_loop():
     """Main application loop for audio processing."""
-    global running, fsm
+    global running, fsm, audio_chunks
+    
+    # Ensure audio_chunks is initialized
+    audio_chunks = []
     
     print("🚀 Initializing Ashtabula Conversation Demo...")
     print("⏳ Loading models, please wait...")
@@ -351,18 +362,23 @@ async def main_loop():
             try:
                 # Process any queued audio chunks
                 if audio_chunks:
-                    # Get the oldest chunk (FIFO)
-                    chunk = audio_chunks.pop(0)
-                    last_chunk_process_time = time.time()
-                    
-                    # Process it with our FSM
-                    await process_audio_chunk(chunk)
-                    
-                    # If queue is getting too big, trim it to prevent memory issues
-                    if len(audio_chunks) > max_chunk_queue:
-                        overflow = len(audio_chunks) - max_chunk_queue
-                        audio_chunks = audio_chunks[overflow:]  # Keep only the newest chunks
-                        print(f"\r⚠️ Audio queue overflow, dropped {overflow} old chunks", end='', flush=True)
+                    try:
+                        # Get the oldest chunk (FIFO)
+                        chunk = audio_chunks.pop(0)
+                        last_chunk_process_time = time.time()
+                        
+                        # Process it with our FSM
+                        await process_audio_chunk(chunk)
+                        
+                        # If queue is getting too big, trim it to prevent memory issues
+                        if len(audio_chunks) > max_chunk_queue:
+                            overflow = len(audio_chunks) - max_chunk_queue
+                            audio_chunks = audio_chunks[overflow:]  # Keep only the newest chunks
+                            print(f"\r⚠️ Audio queue overflow, dropped {overflow} old chunks", end='', flush=True)
+                    except IndexError:
+                        # Handle case where audio_chunks becomes empty between check and access
+                        logger.warning("Audio chunks list was emptied unexpectedly")
+                        await asyncio.sleep(0.05)
                 else:
                     # No audio to process, short sleep
                     await asyncio.sleep(0.05)
