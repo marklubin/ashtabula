@@ -1,1 +1,1 @@
-"""Test package for Ashtabula."""
+"""Tests for MCP Manager."""
