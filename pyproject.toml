@@ -4,6 +4,25 @@ version = "0.1.0"
 description = "A TUI for managing MCP servers across multiple clients"
 readme = "README.md"
 requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "Mark Lubin", email = "mark@example.com"}
+]
+keywords = ["mcp", "model-context-protocol", "tui", "claude", "ai", "server-management"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Systems Administration",
+    "Typing :: Typed",
+]
+
 dependencies = [
     "textual>=0.47.0",
     "rich>=13.7.0",
@@ -13,6 +32,11 @@ dependencies = [
     "typer>=0.9.0",
     "aiofiles>=23.2.1",
 ]
+
+[project.urls]
+Homepage = "https://github.com/marklubin/ashtabula"
+Repository = "https://github.com/marklubin/ashtabula"
+Issues = "https://github.com/marklubin/ashtabula/issues"
 
 [project.optional-dependencies]
 dev = [
