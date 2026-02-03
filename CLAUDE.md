@@ -1,4 +1,4 @@
-# Ashtabula Development Guide
+# MCP Manager Development Guide
 
 ## IMPORTANT: Always Use UV
 
@@ -8,35 +8,35 @@ For running Python commands:
 ```bash
 # ❌ WRONG - Don't use direct Python commands
 python -m pytest
-python scripts/download_models.py
-pip install numpy
+python mcp_manager/cli.py
+pip install textual
 
 # ✅ CORRECT - Always use uv
 uv run pytest
-uv run python -m scripts.download_models
-uv add numpy
-uv pip install transitions
+uv run python -m mcp_manager
+uv add textual
+uv pip install textual
 ```
 
 ## Build & Test Commands
 ```bash
 # Run application
-uv run python -m ashtabula.main
-
-# Download models (required before tests)
-uv run python -m scripts.download_models
+uv run python -m mcp_manager
 
 # Run all tests
-uv run pytest tests/
+uv run pytest
 
 # Run specific test
-uv run pytest tests/test_stt.py
-uv run pytest tests/test_stt.py::TestSTTProvider::test_basic_transcription
+uv run pytest tests/unit/test_models.py
+uv run pytest tests/integration/test_server_lifecycle.py
+
+# Run with coverage
+uv run pytest --cov=mcp_manager --cov-report=html
 
 # Linting & static analysis
-uv run python -m scripts.static_analysis
-uv run mypy ashtabula/
-uv run ruff check ashtabula/
+uv run mypy mcp_manager/
+uv run ruff check mcp_manager/
+uv run ruff format mcp_manager/
 ```
 
 ## Managing Dependencies
@@ -45,65 +45,74 @@ uv run ruff check ashtabula/
 # Add new production dependencies
 uv add package_name
 
-# Install a development dependency
-uv pip install package_name
+# Install development dependencies
+uv pip install -e ".[dev]"
 
-# Update dependencies
-uv pip freeze > requirements.txt
+# Sync dependencies
+uv pip sync
 ```
 
 ## Testing Guidelines
 
-### IMPORTANT: Proper Test Implementation
+### Test Structure
 
-All tests MUST be implemented to run correctly with the project's established testing tools and patterns. Tests should pass without workarounds or subversions of the testing infrastructure.
+- `tests/unit/`: Unit tests for individual components
+- `tests/integration/`: Integration tests for end-to-end flows
+- All test files must be prefixed with `test_`
+- All test classes must be prefixed with `Test`
+- All test methods must be prefixed with `test_`
 
-**✅ CORRECT Approach:**
-- Fix the underlying code to make tests pass
-- Address dependency issues through proper project configuration
-- Use the standard test harness (pytest) as configured in the project
-- Add missing dependencies to the project configuration properly
-- Fix import errors by correcting the code architecture
+### Writing Tests
 
-**❌ INCORRECT Approaches:**
-- Creating mock implementations just to bypass tests
-- Writing alternate test files to avoid using pytest
-- Using direct Python execution instead of the project's test tools
-- Suppressing or commenting out failing tests
-- Modifying tests to pass without fixing underlying issues
-- Creating custom test runners that bypass the standard harness
+```python
+import pytest
+from mcp_manager.domain.models import MCPServer
 
-### Example: Fixing Failing Tests
-
-If a test is failing with:
-```
-ERROR: ModuleNotFoundError: No module named 'transitions'
-```
-
-**✅ CORRECT Solution:**
-```bash
-# Add the dependency properly to the project
-uv add transitions
-
-# Fix any code issues properly
-# Then run tests normally
-uv run pytest
-```
-
-**❌ INCORRECT Solution:**
-```bash
-# Don't create workarounds
-python -m unittest test_simple.py  # Bypassing pytest
-# Don't write custom test files that avoid the issue
-# Don't mock the missing module just to make tests pass
+class TestMCPServer:
+    def test_server_initialization(self) -> None:
+        server = MCPServer(name="test", repository="https://example.com")
+        assert server.name == "test"
 ```
 
 ## Code Style Guidelines
+
 - **Imports**: Standard lib → third-party → local; absolute imports preferred
 - **Types**: All functions require parameter & return type annotations
-- **Naming**: Classes=PascalCase, functions/variables=snake_case, constants=UPPER_SNAKE_CASE
-- **Formatting**: 88 char line length, PEP8 compliant (enforced by ruff)
-- **Docstrings**: Google style for all modules, classes, and functions
+- **Naming**:
+  - Classes: PascalCase
+  - Functions/variables: snake_case
+  - Constants: UPPER_SNAKE_CASE
+- **Formatting**: 88 char line length, enforced by ruff
+- **Docstrings**: Google style for all modules, classes, and public functions
 - **Error handling**: Use specific exceptions with descriptive messages
-- **Testing**: Test classes prefixed with "Test", methods with "test_"
-- **Architecture**: Abstract base classes with provider implementations
+- **Architecture**: Clean architecture with clear separation of concerns
+
+## Project Structure
+
+```
+mcp_manager/
+├── domain/          # Core business models and interfaces
+├── services/        # Business logic and orchestration
+├── adapters/        # External integrations
+└── ui/              # Textual UI components
+
+tests/
+├── unit/            # Unit tests
+└── integration/     # Integration tests
+```
+
+## Architecture Principles
+
+1. **Domain-Driven Design**: Core domain models in `domain/`
+2. **Dependency Inversion**: Depend on abstractions, not concretions
+3. **Separation of Concerns**: UI, business logic, and data access are separate
+4. **Pluggable Architecture**: Easy to extend with new adapters
+5. **Type Safety**: Comprehensive type hints throughout
+
+## Pre-commit Checklist
+
+- [ ] All tests pass: `uv run pytest`
+- [ ] Type checking passes: `uv run mypy mcp_manager/`
+- [ ] Linting passes: `uv run ruff check mcp_manager/`
+- [ ] Code is formatted: `uv run ruff format mcp_manager/`
+- [ ] Documentation is updated
